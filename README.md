@@ -15,9 +15,7 @@
 
 关于登录界面，将从界面布局和登录功能两方面记录。登录界面的设计比较简单，外观如下：
 
-![image-20230420131358381](C:\Users\Reminder\AppData\Roaming\Typora\typora-user-images\image-20230420131358381.png)
-
-
+![image-20230420131358381](.\assets\image-20230420131358381.png)
 
 ##### 界面布局
 
