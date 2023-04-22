@@ -11,6 +11,179 @@
 
 Dialog组件是一个可以被公共使用的提示弹窗，用在了博客编辑与新增，分类编辑与新增，专题的新增与修改，个人信息部分的修改密码，博客成员的新增与修改这几项功能，Dialog组件提供了公共的头部，可以选择有无的底部按钮部分，有无关闭按钮等部分，此外还可以在中间部分加入任意其他组件，这里用到了 <slot></slot> 占位符，除此之外，还可以将需要的按钮以数组的形式传进来，后面在使用到这个组件时，会进行提示。
 
+#### Table组件
+
+Table组件是用于展示列表数据结构的一个公共组件，我们借用了 elements-plus 中的 el-table 以及 el-table-column，并且还借助了 <slot></slot> 占位符，这里在仔细看过代码之后，有一些记录，所以将这一组件的代码放在下面，并在相应的地方做一些注释，代码在粘贴使用的时候，**请务必把注释去掉以保证正常运行**
+
+```vue
+<template>
+  <div>
+    <el-table ref="dataTable"		// 这是 vue 的模板引用，可以将一个响应对象与该元素进行绑定，以获取对该元素的一些操作，这里是为了实现表格中的勾选框而设计的，在本项目中并没有使用，其暴露的 setCurrentRow 方法也没有在父组件中进行调用。
+              :data="dataSource.list || []"		// 是表格的 列表数据， 可以在 elements-plus 官方文档找到
+              :height="tableHeight"
+              :stripe="options.stripe"		// 斑马纹选项
+              :border="options.border"		// 竖直方向边框的选项
+              header-row-class-name="table-header-row"	// 表头行的 className 的回调方法，也可以使用字符串为所有表头行设置一个固定的 className。
+              highlight-current-row		// 是否高亮当前行
+              @row-click="handleRowClick"		// 当某一行被点击时会触发该事件， 回调参数包含 row, column, event
+              @selection-change="handleSelectionChange">	// 当选择项发生变化时会触发该事件 回调参数是 selection
+      <!--selection选择框-->
+      <el-table-column v-if="options.selectType && options.selectType == 'checkbox'"
+                       type="selection"
+                       width="50"
+                       align="center"></el-table-column>
+      <!--序号-->
+      <el-table-column v-if="options.showIndex"
+                       label="序号"
+                       type="index"
+                       width="60"
+                       align="center"></el-table-column>
+      //  以上两个列是供勾选当前列时使用的，在本项目中 table 的作用主要是 display， 所以上面两个没有使用到。
+      <!--数据列-->
+        // 以下是循环一个 表示不同列 的数组
+      <template v-for="(column, index) in columns">
+        <template v-if="column.scopedSlots">
+          <el-table-column :key="index"
+                           :prop="column.prop"		// prop 在 el-table-column 元素中间没有其他值时才起作用，会自动去寻找 表格数据中的 prop 键值，可参考官方文档进行理解，当元素中间有其他要填充的内容时，这个就会被覆盖
+                           :label="column.label"	// 列名
+                           :align="column.align || 'left'"
+                           :width="column.width">
+            <template #default="scope">			// 这里主要用到了 el-table-column 的插槽知识， 与vue 插槽部分的知识， # 是 v-slot 的缩写，这里实际上是两层插槽，是在 el-table-column 提供的插槽基础上，又添加了一层具名插槽，el-table-column 组件的插槽数据需要用 #default将其提取出来， 这里的socpe 实际上是 {row, $index, column} 在官网有提及， 在使用的时候可以用本组件中的形式，也可以用单独的形式，而后再使用一个 具名插槽，将每一行的数据row 和索引 index 暴露给父组件，可以通过 查看 vue插槽以及el-table 部分的插槽加深印象。
+              <slot :name="column.scopedSlots"
+                    :index="scope.$index"
+                    :row="scope.row">
+              </slot>
+            </template>
+          </el-table-column>
+        </template>
+        <template v-else>
+          <el-table-column :key="index"
+                           :prop="column.prop"
+                           :label="column.label"
+                           :align="column.align || 'left'"
+                           :width="column.width"
+                           :fixed="column.fixed">
+          </el-table-column>
+        </template>
+      </template>
+    </el-table>
+    <!-- 分页 -->
+    <div class="pagination"
+         v-if="showPagination">
+      <el-pagination v-if="dataSource.totalCount"		// 这一部分是底部的换页选项
+                     background		// 是否为分页按钮添加背景色
+                     :total="dataSource.totalCount"		// 总条目数
+                     :page-sizes="[15, 30, 50, 100]"		// 每页显示个数选择器的选项设置
+                     :page-size="dataSource.pageSize"		// 最新版本中以及移除
+                     :current-page.sync="dataSource.pageNo"		// 当前页数 .sync 是一个语法糖， 可以看文档
+                     layout="total, sizes, prev, pager, next, jumper"	// 	组件布局，子组件名用逗号分隔
+                     @size-change="handlePageSizeChange"	
+                     @current-change="handlePageNoChange"
+                     style="text-align: right"></el-pagination>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from "vue";
+
+const emit = defineEmits(["rowSelected", "rowClick"]);
+const props = defineProps({
+  dataSource: Object,
+  showPagination: {
+    type: Boolean,
+    default: true,
+  },
+  options: {
+    type: Object,
+    default: {
+      extHeight: 0,
+      showIndex: false,
+    },
+  },
+  columns: Array,
+  fetch: Function, // 获取数据的函数
+  initFetch: {
+    type: Boolean,
+    default: true,
+  },
+});
+
+const radioSelectRowIndex = ref(null);
+
+//顶部 60 , 内容区域距离顶部 20， 内容上下内间距 15*2  分页区域高度 46
+const topHeight = 60 + 20 + 30 + 46;
+
+const tableHeight = ref(
+  props.options.tableHeight
+    ? props.options.tableHeight
+    : window.innerHeight - topHeight - props.options.extHeight
+);
+
+const dataTable = ref();
+
+//行点击
+const handleRowClick = (row) => {
+  emit("rowClick", row);
+};
+
+//多选
+const handleSelectionChange = (row) => {
+  emit("rowSelected", row);
+};
+
+//切换每页大小
+const handlePageSizeChange = (size) => {
+  props.dataSource.pageSize = size;
+  props.dataSource.pageNo = 1;
+  props.fetch();
+};
+// 切换页码
+const handlePageNoChange = (pageNo) => {
+  props.dataSource.pageNo = pageNo;
+  props.fetch();
+};
+//设置行选中
+const setCurrentRow = (rowKey, rowValue) => {
+  let row = props.dataSource.list.find((item) => {
+    return item[rowKey] === rowValue;
+  });
+  dataTable.value.setCurrentRow(row);
+};
+//将子组件暴露出去，否则父组件无法调用
+defineExpose({
+  setCurrentRow,
+});
+
+//初始化
+const init = () => {
+  if (props.initFetch && props.fetch) {
+    props.fetch();
+  }
+};
+init();
+</script>
+
+<style lang="scss">
+.pagination {
+  padding-top: 10px;
+}
+.el-pagination {
+  justify-content: right;
+}
+
+.el-table__body tr.current-row > td.el-table__cell {
+  background-color: #e6f0f9;
+}
+
+.el-table__body tr:hover > td.el-table__cell {
+  background-color: #e6f0f9 !important;
+}
+</style>
+```
+
+关于这一组件的使用还需要结合项目中的使用过程加深理解，例如自定义一个属性列，并设置列宽，每一列的界面布局等等。
+
 ### 管理端
 
 管理端的主要功能有：用户登录，新增博客，新增分类，新增专题，个人信息设置，用户管理，系统设置和回收站。接下来的内容是记录每一个功能的实现流程，供个人面试时使用。
@@ -222,7 +395,7 @@ background-image: url('文件路径')；
 
 ![image-20230420210112310](./assets/image-20230420210112310.png)![image-20230420210124728](./assets/image-20230420210124728.png)
 
-我们要做的是在固定时间间隔内去查看打包的进度，并实时展示到进度条，这里用到了我们创建的公共组件 Dialog，这里用到了 setInterval 来每隔 1s 去调用后端提供的检测进度方法，来更新进度条，进度条的颜色渐变是通过自定义颜色数组实现的，并接住了 el-progress 组件，只需要根据官方文档提供相应的数据结构传入即可。
+我们要做的是在固定时间间隔内去查看打包的进度，并实时展示到进度条，这里用到了我们创建的公共组件 Dialog，这里用到了 setInterval 来每隔 1s 去调用后端提供的检测进度方法，来更新进度条，进度条的颜色渐变是通过自定义颜色数组实现的，并借助了 el-progress 组件，只需要根据官方文档提供相应的数据结构传入即可。
 
 ###### 用户的退出
 
@@ -260,5 +433,5 @@ background-image: url('文件路径')；
 
 ![image-20230420205231412](./assets/image-20230420205231412.png)
 
-博客页面有上下两部分，顶部是一个包含搜索功能、新增功能的小部分区域，这里的状态包含两种---草稿/已发布，而分类则是根据实际存在的类别实时进行获取的，
+博客页面有上下两部分，顶部是一个包含搜索功能、新增功能的小部分区域，这里的状态包含两种---草稿/已发布，而分类则是根据实际存在的类别实时进行获取的，搜索的功能是调用的是获取 **博客列表** 接口，这一方法可以提供带条件的搜索。在这里我们用到了一个 Table 组件，来展示获取到的博客列表，关于 Table 组件我们在公共部分进行介绍。
 
